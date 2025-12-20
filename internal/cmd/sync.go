@@ -11,6 +11,8 @@ import (
 	"github.com/keywaysh/cli/internal/git"
 	"github.com/keywaysh/cli/internal/ui"
 	"github.com/spf13/cobra"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 var syncCmd = &cobra.Command{
@@ -263,7 +265,7 @@ func runSync(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get all projects from provider
-	providerDisplayName := strings.Title(provider)
+	providerDisplayName := cases.Title(language.English).String(provider)
 	allProjects, connections, err := client.GetAllProviderProjects(ctx, provider)
 	if err != nil {
 		// Check if not connected
@@ -606,7 +608,7 @@ func promptProjectSelection(projects []ProjectWithLinkedRepo, repoFullName, prov
 		}
 
 		// Add match badges
-		if p.LinkedRepo != nil && strings.ToLower(*p.LinkedRepo) == strings.ToLower(repoFullName) {
+		if p.LinkedRepo != nil && strings.EqualFold(*p.LinkedRepo, repoFullName) {
 			badges = append(badges, color.GreenString("← linked"))
 		} else if strings.ToLower(p.Name) == repoName {
 			badges = append(badges, color.GreenString("← same name"))
@@ -691,7 +693,7 @@ func displayDiffSummary(diff *api.SyncDiff, providerName string) {
 }
 
 func executeSyncOperation(client *api.Client, ctx context.Context, repo string, project ProjectWithLinkedRepo, keywayEnv, providerEnv, direction string, allowDelete, skipConfirm bool, provider string) error {
-	providerName := strings.Title(provider)
+	providerName := cases.Title(language.English).String(provider)
 
 	// Get preview
 	var preview *api.SyncPreview

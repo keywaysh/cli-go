@@ -75,7 +75,7 @@ func (s *Store) GetAuth() (*StoredAuth, error) {
 	decrypted, err := s.decrypt(encryptedAuth)
 	if err != nil {
 		// Corrupted data, clear it
-		s.ClearAuth()
+		_ = s.ClearAuth()
 		return nil, nil
 	}
 
@@ -88,7 +88,7 @@ func (s *Store) GetAuth() (*StoredAuth, error) {
 	if auth.ExpiresAt != "" {
 		expires, err := time.Parse(time.RFC3339, auth.ExpiresAt)
 		if err == nil && time.Now().After(expires) {
-			s.ClearAuth()
+			_ = s.ClearAuth()
 			return nil, nil
 		}
 	}

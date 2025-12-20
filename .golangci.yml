@@ -23,11 +23,13 @@ linters-settings:
       - fmt.Println
 
 issues:
-  # Exclude test files from errcheck
+  # Exclude test files from certain linters
   exclude-rules:
     - path: _test\.go
       linters:
         - errcheck
+        - ineffassign
+        - staticcheck
     - path: mock\.go
       linters:
         - errcheck

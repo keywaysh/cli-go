@@ -127,8 +127,9 @@ func runInit(cmd *cobra.Command, args []string) error {
 		if ui.IsInteractive() {
 			create, _ := ui.Confirm("No .env file found. Create one?", true)
 			if create {
-				os.WriteFile(".env", []byte("# Add your environment variables here\n"), 0600)
-				ui.Success("Created .env file")
+				if err := os.WriteFile(".env", []byte("# Add your environment variables here\n"), 0600); err == nil {
+					ui.Success("Created .env file")
+				}
 			}
 		}
 		ui.Message(ui.Dim(fmt.Sprintf("Add your variables and run %s", ui.Command("keyway push"))))
@@ -183,27 +184,20 @@ func ensureLoginAndGitHubApp(repo string) (string, error) {
 
 	_ = browser.OpenURL(status.InstallURL)
 
-	// Poll for installation
-	err = ui.Spin("Waiting for GitHub App installation...", func() error {
-		for i := 0; i < 40; i++ { // 2 minutes max
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			default:
-			}
-
-			status, err := client.CheckGitHubAppInstallation(ctx, parts[0], parts[1])
-			if err == nil && status.Installed {
-				return nil
-			}
-
-			// Wait 3 seconds before retry
-			// time.Sleep(3 * time.Second)
-			// Note: Can't easily sleep here without importing time
-			// For now, just check once and fail if not installed
-			return fmt.Errorf("please install the GitHub App and run init again")
+	// Check for installation (user must complete installation and re-run)
+	err = ui.Spin("Checking GitHub App installation...", func() error {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
 		}
-		return fmt.Errorf("installation timed out")
+
+		status, err := client.CheckGitHubAppInstallation(ctx, parts[0], parts[1])
+		if err == nil && status.Installed {
+			return nil
+		}
+
+		return fmt.Errorf("please install the GitHub App and run init again")
 	})
 
 	if err != nil {

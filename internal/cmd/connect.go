@@ -11,6 +11,8 @@ import (
 	"github.com/keywaysh/cli/internal/ui"
 	"github.com/pkg/browser"
 	"github.com/spf13/cobra"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 // Providers that use direct token auth instead of OAuth
@@ -272,7 +274,7 @@ func runConnections(cmd *cobra.Command, args []string) error {
 	ui.Intro("connections")
 
 	for _, conn := range connections {
-		providerName := strings.Title(conn.Provider)
+		providerName := cases.Title(language.English).String(conn.Provider)
 		teamInfo := ""
 		if conn.ProviderTeamID != nil {
 			teamInfo = ui.Dim(fmt.Sprintf(" (Team: %s)", *conn.ProviderTeamID))
@@ -321,7 +323,7 @@ func runDisconnect(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	providerName := strings.Title(provider)
+	providerName := cases.Title(language.English).String(provider)
 
 	if ui.IsInteractive() {
 		confirm, _ := ui.Confirm(fmt.Sprintf("Disconnect from %s?", providerName), false)
