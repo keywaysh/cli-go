@@ -1,0 +1,33 @@
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+
+linters-settings:
+  errcheck:
+    # Ignore specific functions where error return is intentionally not checked
+    exclude-functions:
+      - (io.Writer).Write
+      - (*encoding/json.Encoder).Encode
+      - (*encoding/json.Decoder).Decode
+      - fmt.Fprintf
+      - fmt.Printf
+      - fmt.Print
+      - fmt.Println
+
+issues:
+  # Exclude test files from errcheck
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - errcheck
+    - path: mock\.go
+      linters:
+        - errcheck
