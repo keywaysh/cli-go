@@ -122,12 +122,13 @@ func printCustomHelp(cmd *cobra.Command) {
 	fmt.Printf("  %s  %s\n", bold("keyway"), dim("— Sync secrets with your team and infra"))
 	fmt.Println()
 
-	// Quick Start
-	fmt.Printf("  %s\n", bold("Quick Start:"))
-	fmt.Printf("    %s          %s\n", cyan("keyway login"), "Sign in with GitHub")
+	// Core Commands
+	fmt.Printf("  %s\n", bold("Core Commands:"))
 	fmt.Printf("    %s           %s\n", cyan("keyway init"), "Initialize vault for this repo")
 	fmt.Printf("    %s           %s\n", cyan("keyway push"), "Upload secrets to vault")
 	fmt.Printf("    %s           %s\n", cyan("keyway pull"), "Download secrets from vault")
+	fmt.Printf("    %s            %s\n", cyan("keyway run"), "Run command with injected secrets (Zero-Trust)")
+	fmt.Printf("    %s           %s\n", cyan("keyway login"), "Sign in with GitHub")
 	fmt.Println()
 
 	// Provider Sync

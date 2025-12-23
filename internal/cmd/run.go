@@ -16,7 +16,12 @@ var runCmd = &cobra.Command{
 	Short: "Inject secrets into a command",
 	Long:  `Run a command with secrets injected into the environment.
 Secrets are fetched from the vault and injected directly into the process memory.
-They are never written to disk.`,
+They are never written to disk.
+
+This is particularly useful for:
+- Running local development servers without .env files
+- CI/CD pipelines
+- Using AI agents (Claude Code, Gemini CLI, Codex) safely: the agent runs the command but cannot see the secrets on disk.`,
 	Example: `  keyway run --env development -- npm run dev
   keyway run --env development -- python3 main.py
   keyway run --env production -- ./deploy.sh`,
