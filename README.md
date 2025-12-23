@@ -4,9 +4,19 @@
 
 GitHub-native secrets management. Sync secrets with your team and infra.
 
-## Installation
+## Quick Start
 
-### npm (Node.js)
+```bash
+npx @keywaysh/cli init
+```
+
+No install required. This will authenticate, create a vault, and sync your `.env`.
+
+## Installation (optional)
+
+For faster repeated use, install globally:
+
+### npm
 
 ```bash
 npm install -g @keywaysh/cli
@@ -16,12 +26,6 @@ npm install -g @keywaysh/cli
 
 ```bash
 brew install keywaysh/tap/keyway
-```
-
-### curl (macOS/Linux)
-
-```bash
-curl -fsSL https://keyway.sh/install.sh | sh
 ```
 
 ### Manual download

@@ -2,40 +2,29 @@
 
 GitHub-native secrets management. If you have repo access, you get secret access.
 
-## Installation
-
-```bash
-npm install -g @keywaysh/cli
-```
-
-Or with npx:
-
-```bash
-npx @keywaysh/cli pull
-```
-
 ## Quick Start
 
 ```bash
-# Sign in with GitHub
-keyway login
-
-# Initialize vault for current repo
-keyway init
-
-# Push secrets from .env
-keyway push
-
-# Pull secrets to .env
-keyway pull
+npx @keywaysh/cli init
 ```
 
-## Alternative Installation
+No install required. This will authenticate with GitHub, create a vault, and sync your `.env`.
 
-Using the install script:
+## Usage
 
 ```bash
-curl -fsSL https://keyway.sh/install.sh | sh
+npx @keywaysh/cli pull      # Pull secrets to .env
+npx @keywaysh/cli push      # Push .env to vault
+npx @keywaysh/cli sync      # Sync with Vercel/Railway
+```
+
+## Global Installation (optional)
+
+For faster repeated use:
+
+```bash
+npm install -g @keywaysh/cli
+keyway pull
 ```
 
 ## Documentation
