@@ -8,9 +8,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/keywaysh/cli/internal/analytics"
-	"github.com/keywaysh/cli/internal/api"
 	"github.com/keywaysh/cli/internal/env"
-	"github.com/keywaysh/cli/internal/git"
 	"github.com/keywaysh/cli/internal/ui"
 	"github.com/spf13/cobra"
 )
@@ -67,59 +65,87 @@ type DiffStats struct {
 	Same       int `json:"same"`
 }
 
+// DiffOptions contains the parsed flags for the diff command
+type DiffOptions struct {
+	Env1       string
+	Env2       string
+	ShowValues bool
+	KeysOnly   bool
+	JSONOutput bool
+}
+
+// runDiff is the entry point for the diff command (uses default dependencies)
 func runDiff(cmd *cobra.Command, args []string) error {
-	ui.Intro("diff")
+	opts := DiffOptions{}
+	opts.ShowValues, _ = cmd.Flags().GetBool("show-values")
+	opts.KeysOnly, _ = cmd.Flags().GetBool("keys-only")
+	opts.JSONOutput, _ = cmd.Flags().GetBool("json")
 
-	repo, err := git.DetectRepo()
-	if err != nil {
-		ui.Error("Not in a git repository with GitHub remote")
-		return err
+	if len(args) >= 1 {
+		opts.Env1 = args[0]
 	}
-	ui.Step(fmt.Sprintf("Repository: %s", ui.Value(repo)))
-
-	token, err := EnsureLogin()
-	if err != nil {
-		return err
+	if len(args) >= 2 {
+		opts.Env2 = args[1]
 	}
 
-	client := api.NewClient(token)
+	return runDiffWithDeps(opts, defaultDeps)
+}
+
+// runDiffWithDeps is the testable version of runDiff
+func runDiffWithDeps(opts DiffOptions, deps *Dependencies) error {
+	deps.UI.Intro("diff")
+
+	repo, err := deps.Git.DetectRepo()
+	if err != nil {
+		deps.UI.Error("Not in a git repository with GitHub remote")
+		return err
+	}
+	deps.UI.Step(fmt.Sprintf("Repository: %s", deps.UI.Value(repo)))
+
+	token, err := deps.Auth.EnsureLogin()
+	if err != nil {
+		return err
+	}
+
+	client := deps.APIFactory.NewClient(token)
 	ctx := context.Background()
 
-	var env1, env2 string
+	env1 := opts.Env1
+	env2 := opts.Env2
 
 	// If arguments not provided, prompt interactively
-	if len(args) < 2 {
-		if !ui.IsInteractive() {
-			ui.Error("Two environment arguments required in non-interactive mode")
+	if env1 == "" || env2 == "" {
+		if !deps.UI.IsInteractive() {
+			deps.UI.Error("Two environment arguments required in non-interactive mode")
 			return fmt.Errorf("missing arguments")
 		}
 
 		// Fetch available environments
 		var environments []string
-		err = ui.Spin("Fetching environments...", func() error {
+		err = deps.UI.Spin("Fetching environments...", func() error {
 			var fetchErr error
 			environments, fetchErr = client.GetVaultEnvironments(ctx, repo)
 			return fetchErr
 		})
 		if err != nil {
-			ui.Error(fmt.Sprintf("Failed to fetch environments: %v", err))
+			deps.UI.Error(fmt.Sprintf("Failed to fetch environments: %v", err))
 			return err
 		}
 
 		if len(environments) < 2 {
-			ui.Error("At least 2 environments are needed to compare")
-			ui.Message(ui.Dim("Push secrets to more environments first with: keyway push -e <env>"))
+			deps.UI.Error("At least 2 environments are needed to compare")
+			deps.UI.Message(deps.UI.Dim("Push secrets to more environments first with: keyway push -e <env>"))
 			return fmt.Errorf("not enough environments")
 		}
 
 		// First environment selection
-		if len(args) == 0 {
-			env1, err = ui.Select("Select first environment:", environments)
+		if env1 == "" {
+			env1, err = deps.UI.Select("Select first environment:", environments)
 			if err != nil {
 				return err
 			}
 		} else {
-			env1 = normalizeEnvName(args[0])
+			env1 = normalizeEnvName(env1)
 		}
 
 		// Filter out selected env1 for second selection
@@ -131,35 +157,31 @@ func runDiff(cmd *cobra.Command, args []string) error {
 		}
 
 		if len(remaining) == 0 {
-			ui.Error("No other environments to compare with")
+			deps.UI.Error("No other environments to compare with")
 			return fmt.Errorf("no environments")
 		}
 
-		env2, err = ui.Select("Select second environment:", remaining)
+		env2, err = deps.UI.Select("Select second environment:", remaining)
 		if err != nil {
 			return err
 		}
 	} else {
-		env1 = normalizeEnvName(args[0])
-		env2 = normalizeEnvName(args[1])
+		env1 = normalizeEnvName(env1)
+		env2 = normalizeEnvName(env2)
 	}
 
-	ui.Message(ui.Dim(fmt.Sprintf("Comparing %s vs %s", ui.Bold(env1), ui.Bold(env2))))
+	deps.UI.Message(deps.UI.Dim(fmt.Sprintf("Comparing %s vs %s", deps.UI.Bold(env1), deps.UI.Bold(env2))))
 
 	if env1 == env2 {
-		ui.Error("Cannot compare an environment with itself")
+		deps.UI.Error("Cannot compare an environment with itself")
 		return fmt.Errorf("same environment")
 	}
-
-	showValues, _ := cmd.Flags().GetBool("show-values")
-	keysOnly, _ := cmd.Flags().GetBool("keys-only")
-	jsonOutput, _ := cmd.Flags().GetBool("json")
 
 	// Pull secrets from both environments
 	var secrets1, secrets2 map[string]string
 	var pullErr1, pullErr2 error
 
-	err = ui.Spin(fmt.Sprintf("Fetching %s and %s...", env1, env2), func() error {
+	err = deps.UI.Spin(fmt.Sprintf("Fetching %s and %s...", env1, env2), func() error {
 		resp1, err := client.PullSecrets(ctx, repo, env1)
 		if err != nil {
 			pullErr1 = err
@@ -183,20 +205,20 @@ func runDiff(cmd *cobra.Command, args []string) error {
 
 	// Handle pull errors
 	if pullErr1 != nil && pullErr2 != nil {
-		ui.Error(fmt.Sprintf("Failed to fetch both environments: %s, %s", env1, env2))
+		deps.UI.Error(fmt.Sprintf("Failed to fetch both environments: %s, %s", env1, env2))
 		return fmt.Errorf("failed to fetch environments")
 	}
 	if pullErr1 != nil {
-		ui.Warn(fmt.Sprintf("Environment '%s' is empty or doesn't exist", env1))
+		deps.UI.Warn(fmt.Sprintf("Environment '%s' is empty or doesn't exist", env1))
 		secrets1 = make(map[string]string)
 	}
 	if pullErr2 != nil {
-		ui.Warn(fmt.Sprintf("Environment '%s' is empty or doesn't exist", env2))
+		deps.UI.Warn(fmt.Sprintf("Environment '%s' is empty or doesn't exist", env2))
 		secrets2 = make(map[string]string)
 	}
 
 	// Compare secrets
-	result := compareSecrets(env1, env2, secrets1, secrets2, showValues)
+	result := compareSecrets(env1, env2, secrets1, secrets2, opts.ShowValues)
 
 	// Track diff event
 	analytics.Track(analytics.EventDiff, map[string]interface{}{
@@ -208,14 +230,14 @@ func runDiff(cmd *cobra.Command, args []string) error {
 		"total_env2":        result.Stats.TotalEnv2,
 	})
 
-	if jsonOutput {
+	if opts.JSONOutput {
 		return printDiffJSON(result)
 	}
 
 	// Display results
-	printDiffResults(result, env1, env2, showValues, keysOnly)
+	printDiffResults(result, env1, env2, opts.ShowValues, opts.KeysOnly)
 
-	ui.Outro("")
+	deps.UI.Outro("")
 	return nil
 }
 

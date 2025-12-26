@@ -310,3 +310,78 @@ func TestFindReadmePath_PrefersUppercase(t *testing.T) {
 		t.Errorf("should prefer README.md, got %q", path)
 	}
 }
+
+func TestFindLastBadgeEnd_NoBadges(t *testing.T) {
+	result := findLastBadgeEnd("This is just plain text")
+	if result != -1 {
+		t.Errorf("expected -1 for no badges, got %d", result)
+	}
+}
+
+func TestFindLastBadgeEnd_SingleBadge(t *testing.T) {
+	line := "[![badge](https://img.svg)](https://link.com) some text"
+	result := findLastBadgeEnd(line)
+	if result == -1 {
+		t.Error("should find badge end")
+	}
+	if result > len(line) {
+		t.Errorf("result %d is past end of line %d", result, len(line))
+	}
+}
+
+func TestFindLastBadgeEnd_MultipleBadges(t *testing.T) {
+	line := "[![badge1](url1)](link1) [![badge2](url2)](link2)"
+	result := findLastBadgeEnd(line)
+	if result == -1 {
+		t.Error("should find last badge end")
+	}
+	// Should point to end of second badge
+	if result <= strings.Index(line, "badge2") {
+		t.Error("should find end of last badge, not first")
+	}
+}
+
+func TestFindLastBadgeEnd_NestedParentheses(t *testing.T) {
+	// Badge with URL containing parentheses (like Wikipedia)
+	line := "[![badge](https://img.svg)](https://en.wikipedia.org/wiki/Foo_(bar))"
+	result := findLastBadgeEnd(line)
+	if result != len(line) {
+		t.Errorf("expected end of line %d, got %d", len(line), result)
+	}
+}
+
+func TestFindReadmePath_MarkdownExtension(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "readme-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Test .markdown extension
+	readmePath := filepath.Join(tmpDir, "README.markdown")
+	os.WriteFile(readmePath, []byte("# Test"), 0644)
+
+	path := FindReadmePath(tmpDir)
+	if path != readmePath {
+		t.Errorf("expected %q, got %q", readmePath, path)
+	}
+}
+
+func TestInsertBadge_OnlyWhitespace(t *testing.T) {
+	content := "   \n\n   \n"
+	result := InsertBadgeIntoReadme(content, testBadge)
+	if !strings.Contains(result, testBadge) {
+		t.Error("should insert badge even in whitespace-only content")
+	}
+}
+
+func TestInsertBadge_H1WithSpecialChars(t *testing.T) {
+	content := "# My Project (v2.0) - *Beta*\n\nContent here"
+	result := InsertBadgeIntoReadme(content, testBadge)
+	if !strings.Contains(result, "# My Project (v2.0) - *Beta*") {
+		t.Error("should preserve H1 with special characters")
+	}
+	if !strings.Contains(result, testBadge) {
+		t.Error("should contain badge")
+	}
+}

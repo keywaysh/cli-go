@@ -249,3 +249,94 @@ func TestClient_do_NoToken(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestClient_handleNetworkError_ConnectionRefused(t *testing.T) {
+	client := NewClient("token")
+	// Use a port that's definitely not listening
+	client.baseURL = "http://localhost:59999"
+
+	err := client.do(context.Background(), "GET", "/test", nil, nil)
+	if err == nil {
+		t.Fatal("expected error for refused connection")
+	}
+
+	// Should contain user-friendly message
+	errStr := err.Error()
+	if errStr == "" {
+		t.Error("error message should not be empty")
+	}
+}
+
+func TestClient_do_EmptyResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	client := NewClient("token")
+	client.baseURL = server.URL
+
+	var result map[string]string
+	err := client.do(context.Background(), "DELETE", "/test", nil, &result)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Result should remain nil/empty for 204 No Content
+	if result != nil {
+		t.Error("expected nil result for empty response")
+	}
+}
+
+func TestClient_do_UserAgentHeader(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ua := r.Header.Get("User-Agent")
+		if ua != "keyway-cli/2.0.0" {
+			t.Errorf("expected User-Agent 'keyway-cli/2.0.0', got '%s'", ua)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client := NewClientWithVersion("token", "2.0.0")
+	client.baseURL = server.URL
+
+	err := client.do(context.Background(), "GET", "/test", nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestAPIError_WithUpgradeURL(t *testing.T) {
+	err := &APIError{
+		StatusCode: 403,
+		Detail:     "Plan limit exceeded",
+		UpgradeURL: "https://keyway.sh/upgrade",
+	}
+
+	if err.UpgradeURL != "https://keyway.sh/upgrade" {
+		t.Errorf("expected upgrade URL, got '%s'", err.UpgradeURL)
+	}
+}
+
+func TestAPIError_WithTrialInfo(t *testing.T) {
+	err := &APIError{
+		StatusCode: 403,
+		Detail:     "Trial required",
+		TrialInfo: &TrialEligibility{
+			Eligible:      true,
+			DaysAvailable: 14,
+			OrgLogin:      "acme",
+		},
+	}
+
+	if err.TrialInfo == nil {
+		t.Fatal("expected trial info")
+	}
+	if !err.TrialInfo.Eligible {
+		t.Error("expected eligible to be true")
+	}
+	if err.TrialInfo.DaysAvailable != 14 {
+		t.Errorf("expected 14 days, got %d", err.TrialInfo.DaysAvailable)
+	}
+}

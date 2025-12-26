@@ -56,6 +56,10 @@ func runLogin(cmd *cobra.Command, args []string) error {
 
 // getRepoIdsWithFallback tries to get repo IDs from backend first, then GitHub public API
 func getRepoIdsWithFallback(ctx context.Context, repoFullName string) *api.RepoIds {
+	return getRepoIdsWithFallbackAndDeps(ctx, repoFullName, defaultDeps)
+}
+
+func getRepoIdsWithFallbackAndDeps(ctx context.Context, repoFullName string, deps *Dependencies) *api.RepoIds {
 	if repoFullName == "" {
 		return nil
 	}
@@ -67,7 +71,7 @@ func getRepoIdsWithFallback(ctx context.Context, repoFullName string) *api.RepoI
 	owner, repo := parts[0], parts[1]
 
 	// 1. Try backend (works for private repos if app installed with "all repos")
-	client := api.NewClient("")
+	client := deps.APIFactory.NewClient("")
 	ids, _ := client.GetRepoIdsFromBackend(ctx, repoFullName)
 	if ids != nil {
 		return ids

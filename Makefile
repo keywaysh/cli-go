@@ -37,6 +37,29 @@ test-coverage:
 	go tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report: coverage.html"
 
+# Run tests with coverage (business logic only, excludes delegation wrappers)
+test-coverage-logic:
+	@go test -coverprofile=coverage.out ./internal/cmd/...
+	@echo ""
+	@echo "=== Coverage Summary ==="
+	@echo ""
+	@echo "Raw coverage (all code):"
+	@go tool cover -func=coverage.out | grep "total:"
+	@echo ""
+	@echo "Business logic coverage (WithDeps functions + pure functions):"
+	@go tool cover -func=coverage.out | grep -E "WithDeps|normalize|compare|preview|mask|format|build|isFalse|mapTo|getProject|project|trimSpace|hasPrefix" | awk '{ \
+		split($$3, pct, "%"); \
+		if ($$3 == "100.0%") covered += 1; \
+		else if ($$3 == "0.0%") covered += 0; \
+		else { covered += pct[1]/100; } \
+		total += 1; \
+	} END { printf "  %.1f%% (%d functions)\n", (covered/total)*100, total }'
+	@echo ""
+	@echo "Note: Raw coverage is lower because it includes:"
+	@echo "  - deps_real.go: thin delegation wrappers (0%)"
+	@echo "  - runXXX wrappers: just call WithDeps versions (0%)"
+	@echo "  - Unrefactored commands: connect, sync, scan, login"
+
 # Clean build artifacts
 clean:
 	rm -rf bin/ dist/ coverage.out coverage.html

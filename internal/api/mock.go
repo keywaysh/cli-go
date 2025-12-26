@@ -300,5 +300,12 @@ func (m *MockClient) ExecuteSync(ctx context.Context, repo string, opts SyncOpti
 	}, nil
 }
 
+func (m *MockClient) StartOrganizationTrial(ctx context.Context, orgLogin string) (*StartTrialResponse, error) {
+	return &StartTrialResponse{
+		Message:   "Trial started",
+		TrialEnds: "2025-02-01",
+	}, nil
+}
+
 // Verify MockClient implements APIClient
 var _ APIClient = (*MockClient)(nil)

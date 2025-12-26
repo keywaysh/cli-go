@@ -4,16 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
-	"os"
 	"time"
 
 	"github.com/keywaysh/cli/internal/analytics"
-	"github.com/keywaysh/cli/internal/api"
-	"github.com/keywaysh/cli/internal/auth"
 	"github.com/keywaysh/cli/internal/config"
-	"github.com/keywaysh/cli/internal/git"
-	"github.com/keywaysh/cli/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -46,38 +40,51 @@ type doctorSummary struct {
 	ExitCode int `json:"exitCode"`
 }
 
-func runDoctor(cmd *cobra.Command, args []string) error {
-	jsonOutput, _ := cmd.Flags().GetBool("json")
-	strict, _ := cmd.Flags().GetBool("strict")
+// DoctorOptions contains the parsed flags for the doctor command
+type DoctorOptions struct {
+	JSONOutput bool
+	Strict     bool
+}
 
-	if !jsonOutput {
-		ui.Intro("doctor")
+// runDoctor is the entry point for the doctor command (uses default dependencies)
+func runDoctor(cmd *cobra.Command, args []string) error {
+	opts := DoctorOptions{}
+	opts.JSONOutput, _ = cmd.Flags().GetBool("json")
+	opts.Strict, _ = cmd.Flags().GetBool("strict")
+
+	return runDoctorWithDeps(opts, defaultDeps)
+}
+
+// runDoctorWithDeps is the testable version of runDoctor
+func runDoctorWithDeps(opts DoctorOptions, deps *Dependencies) error {
+	if !opts.JSONOutput {
+		deps.UI.Intro("doctor")
 	}
 
 	checks := []checkResult{}
 
 	// 1. Authentication check
-	authCheck := checkAuth()
+	authCheck := checkAuthWithDeps(deps)
 	checks = append(checks, authCheck)
 
 	// 2. GitHub repository check
-	githubCheck := checkGitHub()
+	githubCheck := checkGitHubWithDeps(deps)
 	checks = append(checks, githubCheck)
 
 	// 3. Network/API check
-	networkCheck := checkNetwork()
+	networkCheck := checkNetworkWithDeps(deps)
 	checks = append(checks, networkCheck)
 
 	// 4. Env file check
-	envCheck := checkEnvFile()
+	envCheck := checkEnvFileWithDeps(deps)
 	checks = append(checks, envCheck)
 
 	// 5. Gitignore check
-	gitignoreCheck := checkGitignore()
+	gitignoreCheck := checkGitignoreWithDeps(deps)
 	checks = append(checks, gitignoreCheck)
 
 	// Apply strict mode
-	if strict {
+	if opts.Strict {
 		for i := range checks {
 			if checks[i].Status == "warn" {
 				checks[i].Status = "fail"
@@ -107,27 +114,27 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 		"pass":   summary.Summary.Pass,
 		"warn":   summary.Summary.Warn,
 		"fail":   summary.Summary.Fail,
-		"strict": strict,
+		"strict": opts.Strict,
 	})
 
 	// Output
-	if jsonOutput {
+	if opts.JSONOutput {
 		output, _ := json.MarshalIndent(summary, "", "  ")
 		fmt.Println(string(output))
 	} else {
 		for _, c := range checks {
 			switch c.Status {
 			case "pass":
-				ui.Success(fmt.Sprintf("%s: %s", c.Name, c.Detail))
+				deps.UI.Success(fmt.Sprintf("%s: %s", c.Name, c.Detail))
 			case "warn":
-				ui.Warn(fmt.Sprintf("%s: %s", c.Name, c.Detail))
+				deps.UI.Warn(fmt.Sprintf("%s: %s", c.Name, c.Detail))
 			case "fail":
-				ui.Error(fmt.Sprintf("%s: %s", c.Name, c.Detail))
+				deps.UI.Error(fmt.Sprintf("%s: %s", c.Name, c.Detail))
 			}
 		}
 
 		fmt.Println()
-		ui.Message(fmt.Sprintf("Results: %d passed, %d warnings, %d failed",
+		deps.UI.Message(fmt.Sprintf("Results: %d passed, %d warnings, %d failed",
 			summary.Summary.Pass, summary.Summary.Warn, summary.Summary.Fail))
 	}
 
@@ -138,8 +145,11 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 }
 
 func checkAuth() checkResult {
-	store := auth.NewStore()
-	storedAuth, err := store.GetAuth()
+	return checkAuthWithDeps(defaultDeps)
+}
+
+func checkAuthWithDeps(deps *Dependencies) checkResult {
+	storedAuth, err := deps.AuthStore.GetAuth()
 
 	if err != nil || storedAuth == nil {
 		return checkResult{
@@ -151,7 +161,7 @@ func checkAuth() checkResult {
 	}
 
 	// Validate token
-	client := api.NewClient(storedAuth.KeywayToken)
+	client := deps.APIFactory.NewClient(storedAuth.KeywayToken)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -182,7 +192,11 @@ func checkAuth() checkResult {
 }
 
 func checkGitHub() checkResult {
-	if !git.IsGitRepository() {
+	return checkGitHubWithDeps(defaultDeps)
+}
+
+func checkGitHubWithDeps(deps *Dependencies) checkResult {
+	if !deps.Git.IsGitRepository() {
 		return checkResult{
 			ID:     "github",
 			Name:   "GitHub repository",
@@ -191,7 +205,7 @@ func checkGitHub() checkResult {
 		}
 	}
 
-	repo, err := git.DetectRepo()
+	repo, err := deps.Git.DetectRepo()
 	if err != nil {
 		return checkResult{
 			ID:     "github",
@@ -210,10 +224,13 @@ func checkGitHub() checkResult {
 }
 
 func checkNetwork() checkResult {
+	return checkNetworkWithDeps(defaultDeps)
+}
+
+func checkNetworkWithDeps(deps *Dependencies) checkResult {
 	healthURL := config.GetAPIURL() + "/v1/health"
 
-	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Head(healthURL)
+	statusCode, err := deps.HTTP.Head(healthURL)
 
 	if err != nil {
 		return checkResult{
@@ -223,14 +240,13 @@ func checkNetwork() checkResult {
 			Detail: "Cannot connect to API server",
 		}
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode >= 500 {
+	if statusCode >= 500 {
 		return checkResult{
 			ID:     "network",
 			Name:   "API connectivity",
 			Status: "warn",
-			Detail: fmt.Sprintf("Server returned %d", resp.StatusCode),
+			Detail: fmt.Sprintf("Server returned %d", statusCode),
 		}
 	}
 
@@ -243,11 +259,15 @@ func checkNetwork() checkResult {
 }
 
 func checkEnvFile() checkResult {
+	return checkEnvFileWithDeps(defaultDeps)
+}
+
+func checkEnvFileWithDeps(deps *Dependencies) checkResult {
 	envFiles := []string{".env", ".env.local", ".env.development", ".env.production"}
 	found := []string{}
 
 	for _, f := range envFiles {
-		if _, err := os.Stat(f); err == nil {
+		if _, err := deps.Stat.Stat(f); err == nil {
 			found = append(found, f)
 		}
 	}
@@ -270,7 +290,11 @@ func checkEnvFile() checkResult {
 }
 
 func checkGitignore() checkResult {
-	if !git.IsGitRepository() {
+	return checkGitignoreWithDeps(defaultDeps)
+}
+
+func checkGitignoreWithDeps(deps *Dependencies) checkResult {
+	if !deps.Git.IsGitRepository() {
 		return checkResult{
 			ID:     "gitignore",
 			Name:   ".gitignore",
@@ -279,7 +303,7 @@ func checkGitignore() checkResult {
 		}
 	}
 
-	if git.CheckEnvGitignore() {
+	if deps.Git.CheckEnvGitignore() {
 		return checkResult{
 			ID:     "gitignore",
 			Name:   ".gitignore",

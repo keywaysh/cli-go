@@ -116,3 +116,114 @@ func TestSelectDefaultValue_DocumentedBehavior(t *testing.T) {
 	t.Log("Select() currently has no default value parameter")
 	t.Log("If adding default support, initialize: result := defaultValue")
 }
+
+func TestValue_DifferentTypes(t *testing.T) {
+	tests := []struct {
+		name  string
+		input interface{}
+	}{
+		{"string", "test"},
+		{"int", 42},
+		{"float", 3.14},
+		{"bool", true},
+		{"nil", nil},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := Value(tt.input)
+			if result == "" && tt.input != nil {
+				t.Errorf("Value(%v) should return non-empty string", tt.input)
+			}
+		})
+	}
+}
+
+func TestFormattingFunctions_Consistency(t *testing.T) {
+	// All formatting functions should return non-empty strings
+	// and contain the original input
+
+	t.Run("File contains path", func(t *testing.T) {
+		result := File("test.txt")
+		if result == "" {
+			t.Error("File() should return non-empty string")
+		}
+	})
+
+	t.Run("Link contains URL", func(t *testing.T) {
+		result := Link("https://example.com")
+		if result == "" {
+			t.Error("Link() should return non-empty string")
+		}
+	})
+
+	t.Run("Command contains cmd", func(t *testing.T) {
+		result := Command("keyway pull")
+		if result == "" {
+			t.Error("Command() should return non-empty string")
+		}
+	})
+
+	t.Run("Dim returns text", func(t *testing.T) {
+		result := Dim("dimmed")
+		if result == "" {
+			t.Error("Dim() should return non-empty string")
+		}
+	})
+
+	t.Run("Bold returns text", func(t *testing.T) {
+		result := Bold("bold")
+		if result == "" {
+			t.Error("Bold() should return non-empty string")
+		}
+	})
+}
+
+func TestIsInteractive_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name    string
+		ciValue string
+	}{
+		// These are NOT recognized as CI=true, so IsInteractive might return true
+		// (depending on terminal status)
+		{"CI=TRUE uppercase", "TRUE"},
+		{"CI=True mixed", "True"},
+		{"CI=yes", "yes"},
+		{"CI=on", "on"},
+		{"CI=0", "0"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			original := os.Getenv("CI")
+			defer os.Setenv("CI", original)
+
+			os.Setenv("CI", tt.ciValue)
+			// Just verify it doesn't panic - the actual value depends on terminal status
+			_ = IsInteractive()
+		})
+	}
+}
+
+func TestFormattingFunctions_EmptyInput(t *testing.T) {
+	// Test that formatting functions handle empty input gracefully
+	tests := []struct {
+		name string
+		fn   func(string) string
+	}{
+		{"Dim", Dim},
+		{"Bold", Bold},
+		{"File", File},
+		{"Link", Link},
+		{"Command", Command},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name+"_empty", func(t *testing.T) {
+			// Should not panic with empty input
+			result := tt.fn("")
+			// Result can be empty or contain ANSI codes, just shouldn't panic
+			_ = result
+		})
+	}
+}

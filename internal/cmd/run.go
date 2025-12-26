@@ -6,9 +6,6 @@ import (
 
 	"github.com/keywaysh/cli/internal/api"
 	"github.com/keywaysh/cli/internal/env"
-	"github.com/keywaysh/cli/internal/git"
-	"github.com/keywaysh/cli/internal/injector"
-	"github.com/keywaysh/cli/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -26,44 +23,61 @@ This is particularly useful for:
 	Example: `  keyway run --env development -- npm run dev
   keyway run --env development -- python3 main.py
   keyway run --env production -- ./deploy.sh`,
-	RunE: runRun,
+	RunE: runRunCmd,
 }
 
 func init() {
 	runCmd.Flags().StringP("env", "e", "development", "Environment name")
 }
 
-func runRun(cmd *cobra.Command, args []string) error {
+// RunOptions contains the parsed flags for the run command
+type RunOptions struct {
+	EnvName    string
+	EnvFlagSet bool
+	Command    string
+	Args       []string
+}
+
+// runRunCmd is the entry point for the run command (uses default dependencies)
+func runRunCmd(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("command required")
 	}
 
-	commandName := args[0]
-	commandArgs := args[1:]
+	opts := RunOptions{
+		EnvFlagSet: cmd.Flags().Changed("env"),
+		Command:    args[0],
+		Args:       args[1:],
+	}
+	opts.EnvName, _ = cmd.Flags().GetString("env")
 
+	return runRunWithDeps(opts, defaultDeps)
+}
+
+// runRunWithDeps is the testable version of runRun
+func runRunWithDeps(opts RunOptions, deps *Dependencies) error {
 	// 1. Detect Repo
-	repo, err := git.DetectRepo()
+	repo, err := deps.Git.DetectRepo()
 	if err != nil {
-		ui.Error("Not in a git repository with GitHub remote")
+		deps.UI.Error("Not in a git repository with GitHub remote")
 		return err
 	}
 
 	// 2. Ensure Login
-	token, err := EnsureLogin()
+	token, err := deps.Auth.EnsureLogin()
 	if err != nil {
-		ui.Error(err.Error())
+		deps.UI.Error(err.Error())
 		return err
 	}
 
 	// 3. Setup Client
-	client := api.NewClient(token)
+	client := deps.APIFactory.NewClient(token)
 	ctx := context.Background()
 
 	// 4. Determine Environment
-	envName, _ := cmd.Flags().GetString("env")
-	envFlagSet := cmd.Flags().Changed("env")
+	envName := opts.EnvName
 
-	if !envFlagSet && ui.IsInteractive() {
+	if !opts.EnvFlagSet && deps.UI.IsInteractive() {
 		// Fetch available environments
 		vaultEnvs, err := client.GetVaultEnvironments(ctx, repo)
 		if err != nil || len(vaultEnvs) == 0 {
@@ -84,18 +98,18 @@ func runRun(cmd *cobra.Command, args []string) error {
 			vaultEnvs[0], vaultEnvs[defaultIdx] = vaultEnvs[defaultIdx], vaultEnvs[0]
 		}
 
-		selected, err := ui.Select("Environment:", vaultEnvs)
+		selected, err := deps.UI.Select("Environment:", vaultEnvs)
 		if err != nil {
 			return err
 		}
 		envName = selected
 	}
 
-	ui.Step(fmt.Sprintf("Environment: %s", ui.Value(envName)))
+	deps.UI.Step(fmt.Sprintf("Environment: %s", deps.UI.Value(envName)))
 
 	// 5. Fetch Secrets
 	var vaultContent string
-	err = ui.Spin("Fetching secrets...", func() error {
+	err = deps.UI.Spin("Fetching secrets...", func() error {
 		resp, err := client.PullSecrets(ctx, repo, envName)
 		if err != nil {
 			return err
@@ -106,17 +120,17 @@ func runRun(cmd *cobra.Command, args []string) error {
 
 	if err != nil {
 		if apiErr, ok := err.(*api.APIError); ok {
-			ui.Error(apiErr.Error())
+			deps.UI.Error(apiErr.Error())
 		} else {
-			ui.Error(err.Error())
+			deps.UI.Error(err.Error())
 		}
 		return err
 	}
 
 	// 6. Parse Secrets
 	secrets := env.Parse(vaultContent)
-	ui.Success(fmt.Sprintf("Injected %d secrets", len(secrets)))
+	deps.UI.Success(fmt.Sprintf("Injected %d secrets", len(secrets)))
 
 	// 7. Execute Command
-	return injector.RunCommand(commandName, commandArgs, secrets)
+	return deps.CmdRunner.RunCommand(opts.Command, opts.Args, secrets)
 }
