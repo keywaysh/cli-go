@@ -24,20 +24,29 @@ make install            # Install to /usr/local/bin
 cmd/keyway/         # Entry point (main.go)
 internal/
 ├── cmd/            # Cobra commands with DI pattern
-│   ├── deps.go         # Interface definitions
+│   ├── root.go         # Root command, registers all subcommands
+│   ├── deps.go         # Interface definitions for DI
 │   ├── deps_real.go    # Real implementations (thin wrappers)
 │   ├── mocks_test.go   # Mock implementations for testing
-│   ├── pull.go         # Pull command
-│   ├── push.go         # Push command
-│   ├── init.go         # Init command
-│   ├── doctor.go       # Doctor command
-│   └── auth_error.go   # Auth error handling (401 retry)
+│   ├── auth_error.go   # Auth error handling (401 retry)
+│   ├── init.go         # keyway init
+│   ├── login.go        # keyway login
+│   ├── pull.go         # keyway pull
+│   ├── push.go         # keyway push
+│   ├── run.go          # keyway run (inject secrets into command)
+│   ├── diff.go         # keyway diff (compare local vs vault)
+│   ├── doctor.go       # keyway doctor (diagnostics)
+│   ├── scan.go         # keyway scan (find leaked secrets)
+│   ├── sync.go         # keyway sync (sync with external providers)
+│   ├── connect.go      # keyway connect (link external providers)
+│   └── readme.go       # keyway readme (add badge)
 ├── api/            # Keyway API client
 ├── auth/           # Token storage (keyring)
 ├── config/         # Configuration and environment
 ├── git/            # Git repository detection
-├── analytics/      # PostHog telemetry
 ├── env/            # Env file parsing and diffing
+├── injector/       # Secret injection into subprocess environment
+├── analytics/      # PostHog telemetry
 └── ui/             # Terminal UI helpers (huh, spinner, colors)
 npm/                # npm package for distribution
 ```
@@ -134,7 +143,8 @@ if isAuthError(err) {
 
 ```go
 client := api.NewClient(token)
-secrets, err := client.PullSecrets(ctx, owner, repo, env)
+resp, err := client.PullSecrets(ctx, "owner/repo", "development")
+// resp.Content contains the env file content
 ```
 
 ### UI Helpers
@@ -176,5 +186,5 @@ go test -v ./internal/cmd/... # Verbose output for cmd package
 
 The `npm/` directory contains the npm package (`@keywaysh/cli`) that downloads the Go binary at install time:
 - `npm/package.json` - Package config
-- `npm/scripts/install.js` - Downloads binary from GitHub Releases
-- `npm/bin/keyway` - Node.js wrapper that calls the binary
+- `npm/scripts/postinstall.js` - Downloads binary from GitHub Releases
+- `npm/bin/keyway` - Shell wrapper that calls the binary
