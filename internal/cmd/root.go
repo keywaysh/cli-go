@@ -209,6 +209,15 @@ func Execute(ver string) error {
 	// Execute the command
 	err := rootCmd.Execute()
 
+	// Display error and help for unknown commands
+	if err != nil {
+		red := color.New(color.FgRed).SprintFunc()
+		fmt.Fprintf(os.Stderr, "\n  %s %s\n", red("Error:"), err)
+		fmt.Println()
+		printCustomHelp(rootCmd)
+		return err
+	}
+
 	// Display update notice if available (non-blocking receive)
 	select {
 	case info := <-updateChan:
@@ -219,7 +228,7 @@ func Execute(ver string) error {
 		// Check not complete, don't wait
 	}
 
-	return err
+	return nil
 }
 
 func displayUpdateNotice(info *version.UpdateInfo) {
