@@ -57,16 +57,20 @@ type MockUIProvider struct {
 	SpinError      error
 
 	// Track calls for assertions
-	IntroCalls     []string
-	OutroCalls     []string
-	SuccessCalls   []string
-	ErrorCalls     []string
-	WarnCalls      []string
-	InfoCalls      []string
-	StepCalls      []string
-	MessageCalls   []string
-	ConfirmCalls   []string
-	SelectCalls    []string
+	IntroCalls       []string
+	OutroCalls       []string
+	SuccessCalls     []string
+	ErrorCalls       []string
+	WarnCalls        []string
+	InfoCalls        []string
+	StepCalls        []string
+	MessageCalls     []string
+	ConfirmCalls     []string
+	SelectCalls      []string
+	DiffAddedCalls   []string
+	DiffChangedCalls []string
+	DiffRemovedCalls []string
+	DiffKeptCalls    []string
 }
 
 func (m *MockUIProvider) Intro(command string)    { m.IntroCalls = append(m.IntroCalls, command) }
@@ -98,10 +102,10 @@ func (m *MockUIProvider) Link(url string) string       { return url }
 func (m *MockUIProvider) Command(cmd string) string    { return cmd }
 func (m *MockUIProvider) Bold(text string) string      { return text }
 func (m *MockUIProvider) Dim(text string) string       { return text }
-func (m *MockUIProvider) DiffAdded(key string)         {}
-func (m *MockUIProvider) DiffChanged(key string)       {}
-func (m *MockUIProvider) DiffRemoved(key string)       {}
-func (m *MockUIProvider) DiffKept(key string)          {}
+func (m *MockUIProvider) DiffAdded(key string)   { m.DiffAddedCalls = append(m.DiffAddedCalls, key) }
+func (m *MockUIProvider) DiffChanged(key string) { m.DiffChangedCalls = append(m.DiffChangedCalls, key) }
+func (m *MockUIProvider) DiffRemoved(key string) { m.DiffRemovedCalls = append(m.DiffRemovedCalls, key) }
+func (m *MockUIProvider) DiffKept(key string)    { m.DiffKeptCalls = append(m.DiffKeptCalls, key) }
 
 // MockFileSystem is a mock implementation of FileSystem
 type MockFileSystem struct {
@@ -144,6 +148,7 @@ type MockAPIClient struct {
 	PullError                          error
 	PushResponse                       *api.PushSecretsResponse
 	PushError                          error
+	PushedSecrets                      map[string]string // Captures secrets sent in PushSecrets call
 	InitResponse                       *api.InitVaultResponse
 	InitError                          error
 	VaultExists                        bool
@@ -179,6 +184,7 @@ func (m *MockAPIClient) GetVaultEnvironments(ctx context.Context, repoFullName s
 	return m.VaultEnvs, m.VaultEnvsError
 }
 func (m *MockAPIClient) PushSecrets(ctx context.Context, repo, env string, secrets map[string]string) (*api.PushSecretsResponse, error) {
+	m.PushedSecrets = secrets
 	return m.PushResponse, m.PushError
 }
 func (m *MockAPIClient) PullSecrets(ctx context.Context, repo, env string) (*api.PullSecretsResponse, error) {

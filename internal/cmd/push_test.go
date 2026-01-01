@@ -585,3 +585,164 @@ func TestRunPushWithDeps_WithDiff(t *testing.T) {
 		t.Error("expected UI.Success to be called")
 	}
 }
+
+func TestRunPushWithDeps_WithoutPrune_PreservesVaultSecrets(t *testing.T) {
+	deps, _, _, uiMock, fsMock, envMock, apiMock := NewTestDepsWithEnv()
+
+	// Setup - local has 2 secrets, vault has an additional secret
+	fsMock.Files[".env"] = []byte("API_KEY=local_value\nNEW_KEY=new")
+	envMock.Candidates = []EnvCandidate{{File: ".env", Env: "development"}}
+	apiMock.PullResponse = &api.PullSecretsResponse{Content: "API_KEY=old_value\nVAULT_ONLY=should_be_preserved"}
+	apiMock.PushResponse = &api.PushSecretsResponse{
+		Message: "Secrets saved",
+	}
+
+	opts := PushOptions{
+		EnvName:    "development",
+		File:       ".env",
+		Yes:        true,
+		EnvFlagSet: true,
+		Prune:      false, // Default: don't prune
+	}
+
+	// Execute
+	err := runPushWithDeps(opts, deps)
+
+	// Assert
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// Check that VAULT_ONLY was preserved in the push (merged)
+	if apiMock.PushedSecrets == nil {
+		t.Fatal("expected PushedSecrets to be set")
+	}
+	if _, ok := apiMock.PushedSecrets["VAULT_ONLY"]; !ok {
+		t.Error("expected VAULT_ONLY to be preserved when --prune is not set")
+	}
+	if apiMock.PushedSecrets["VAULT_ONLY"] != "should_be_preserved" {
+		t.Errorf("expected VAULT_ONLY='should_be_preserved', got '%s'", apiMock.PushedSecrets["VAULT_ONLY"])
+	}
+
+	// Check that local secrets are also present
+	if apiMock.PushedSecrets["API_KEY"] != "local_value" {
+		t.Errorf("expected API_KEY='local_value', got '%s'", apiMock.PushedSecrets["API_KEY"])
+	}
+	if apiMock.PushedSecrets["NEW_KEY"] != "new" {
+		t.Errorf("expected NEW_KEY='new', got '%s'", apiMock.PushedSecrets["NEW_KEY"])
+	}
+
+	// Check that warning was shown about vault-only secrets
+	warnFound := false
+	for _, msg := range uiMock.WarnCalls {
+		if len(msg) > 0 {
+			warnFound = true
+			break
+		}
+	}
+	if !warnFound {
+		t.Error("expected warning about vault-only secrets")
+	}
+}
+
+func TestRunPushWithDeps_WithPrune_RemovesVaultSecrets(t *testing.T) {
+	deps, _, _, uiMock, fsMock, envMock, apiMock := NewTestDepsWithEnv()
+
+	// Setup - local has 2 secrets, vault has an additional secret
+	fsMock.Files[".env"] = []byte("API_KEY=local_value\nNEW_KEY=new")
+	envMock.Candidates = []EnvCandidate{{File: ".env", Env: "development"}}
+	apiMock.PullResponse = &api.PullSecretsResponse{Content: "API_KEY=old_value\nVAULT_ONLY=will_be_removed"}
+	apiMock.PushResponse = &api.PushSecretsResponse{
+		Message: "Secrets saved",
+	}
+
+	opts := PushOptions{
+		EnvName:    "development",
+		File:       ".env",
+		Yes:        true,
+		EnvFlagSet: true,
+		Prune:      true, // Prune enabled
+	}
+
+	// Execute
+	err := runPushWithDeps(opts, deps)
+
+	// Assert
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// Check that VAULT_ONLY was NOT included in the push (will be deleted by backend)
+	if apiMock.PushedSecrets == nil {
+		t.Fatal("expected PushedSecrets to be set")
+	}
+	if _, ok := apiMock.PushedSecrets["VAULT_ONLY"]; ok {
+		t.Error("expected VAULT_ONLY to NOT be in push when --prune is set")
+	}
+
+	// Check that local secrets are present
+	if len(apiMock.PushedSecrets) != 2 {
+		t.Errorf("expected 2 secrets, got %d", len(apiMock.PushedSecrets))
+	}
+
+	// Check that "Will be moved to trash" message was shown
+	diffRemovedFound := false
+	for _, key := range uiMock.DiffRemovedCalls {
+		if key == "VAULT_ONLY" {
+			diffRemovedFound = true
+			break
+		}
+	}
+	if !diffRemovedFound {
+		t.Error("expected DiffRemoved to be called for VAULT_ONLY")
+	}
+
+	// Check no warning about vault-only secrets (since we're pruning)
+	// The warn should be about gitignore, not about vault-only secrets
+	for _, msg := range uiMock.WarnCalls {
+		if msg != ".env files are not in .gitignore - secrets may be committed" {
+			// Skip gitignore warning
+			t.Errorf("unexpected warning: %s", msg)
+		}
+	}
+}
+
+func TestRunPushWithDeps_NoVaultOnlySecrets_NoPruneWarning(t *testing.T) {
+	deps, _, _, uiMock, fsMock, envMock, apiMock := NewTestDepsWithEnv()
+
+	// Setup - local and vault have same keys (no vault-only secrets)
+	fsMock.Files[".env"] = []byte("API_KEY=new_value\nDB_URL=updated")
+	envMock.Candidates = []EnvCandidate{{File: ".env", Env: "development"}}
+	apiMock.PullResponse = &api.PullSecretsResponse{Content: "API_KEY=old_value\nDB_URL=old"}
+	apiMock.PushResponse = &api.PushSecretsResponse{
+		Message: "Secrets saved",
+	}
+
+	opts := PushOptions{
+		EnvName:    "development",
+		File:       ".env",
+		Yes:        true,
+		EnvFlagSet: true,
+		Prune:      false,
+	}
+
+	// Execute
+	err := runPushWithDeps(opts, deps)
+
+	// Assert
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// Check that no warning about --prune was shown (only gitignore warning expected)
+	pruneWarnFound := false
+	for _, msg := range uiMock.WarnCalls {
+		if msg != ".env files are not in .gitignore - secrets may be committed" {
+			pruneWarnFound = true
+			break
+		}
+	}
+	if pruneWarnFound {
+		t.Error("did not expect prune warning when there are no vault-only secrets")
+	}
+}

@@ -22,6 +22,7 @@ func init() {
 	pushCmd.Flags().StringP("env", "e", "", "Environment name")
 	pushCmd.Flags().StringP("file", "f", "", "Env file to push")
 	pushCmd.Flags().BoolP("yes", "y", false, "Skip confirmation prompt")
+	pushCmd.Flags().Bool("prune", false, "Remove secrets from vault that are not in local file")
 }
 
 // PushOptions contains the parsed flags for the push command
@@ -29,6 +30,7 @@ type PushOptions struct {
 	EnvName    string
 	File       string
 	Yes        bool
+	Prune      bool
 	EnvFlagSet bool
 }
 
@@ -40,6 +42,7 @@ func runPush(cmd *cobra.Command, args []string) error {
 	opts.EnvName, _ = cmd.Flags().GetString("env")
 	opts.File, _ = cmd.Flags().GetString("file")
 	opts.Yes, _ = cmd.Flags().GetBool("yes")
+	opts.Prune, _ = cmd.Flags().GetBool("prune")
 
 	return runPushWithDeps(opts, defaultDeps)
 }
@@ -247,6 +250,20 @@ func runPushWithDeps(opts PushOptions, deps *Dependencies) error {
 	// Calculate and show diff
 	diff := env.CalculatePushDiff(secrets, vaultSecrets)
 
+	// When --prune is NOT set, merge vault secrets into local (additive mode)
+	// This preserves vault-only secrets instead of deleting them
+	secretsToSend := secrets
+	if !opts.Prune && len(diff.Removed) > 0 {
+		// Merge: start with vault secrets, overlay local secrets
+		secretsToSend = make(map[string]string)
+		for k, v := range vaultSecrets {
+			secretsToSend[k] = v
+		}
+		for k, v := range secrets {
+			secretsToSend[k] = v
+		}
+	}
+
 	if diff.HasChanges() {
 		// Show additions and updates
 		if len(diff.Added) > 0 || len(diff.Changed) > 0 {
@@ -260,13 +277,20 @@ func runPushWithDeps(opts PushOptions, deps *Dependencies) error {
 			}
 		}
 
-		// Show removals separately (soft-delete to trash)
-		if len(diff.Removed) > 0 {
+		// Show removals only when --prune is set
+		if opts.Prune && len(diff.Removed) > 0 {
 			deps.UI.Message("")
 			deps.UI.Message("Will be moved to trash (not in local file):")
 			for _, key := range diff.Removed {
 				deps.UI.DiffRemoved(key)
 			}
+		}
+
+		// Warn about vault-only secrets when --prune is NOT set
+		if !opts.Prune && len(diff.Removed) > 0 {
+			deps.UI.Message("")
+			deps.UI.Warn(fmt.Sprintf("%d secret(s) in vault not in local file: %s", len(diff.Removed), strings.Join(diff.Removed, ", ")))
+			deps.UI.Message(deps.UI.Dim("Use --prune to remove them, or keyway pull to fetch them"))
 		}
 		deps.UI.Message("")
 	} else {
@@ -294,7 +318,7 @@ func runPushWithDeps(opts PushOptions, deps *Dependencies) error {
 	var resp *api.PushSecretsResponse
 	err = deps.UI.Spin("Uploading secrets...", func() error {
 		var err error
-		resp, err = client.PushSecrets(ctx, repo, envName, secrets)
+		resp, err = client.PushSecrets(ctx, repo, envName, secretsToSend)
 		return err
 	})
 
@@ -309,7 +333,7 @@ func runPushWithDeps(opts PushOptions, deps *Dependencies) error {
 			client = deps.APIFactory.NewClient(newToken)
 			err = deps.UI.Spin("Uploading secrets...", func() error {
 				var pushErr error
-				resp, pushErr = client.PushSecrets(ctx, repo, envName, secrets)
+				resp, pushErr = client.PushSecrets(ctx, repo, envName, secretsToSend)
 				return pushErr
 			})
 		}
