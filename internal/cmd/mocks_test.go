@@ -49,12 +49,14 @@ func (m *MockAuthProvider) EnsureLogin() (string, error) {
 
 // MockUIProvider is a mock implementation of UIProvider
 type MockUIProvider struct {
-	Interactive    bool
-	ConfirmResult  bool
-	ConfirmError   error
-	SelectResult   string
-	SelectError    error
-	SpinError      error
+	Interactive     bool
+	ConfirmResult   bool
+	ConfirmError    error
+	SelectResult    string
+	SelectError     error
+	PasswordResult  string
+	PasswordError   error
+	SpinError       error
 
 	// Track calls for assertions
 	IntroCalls       []string
@@ -67,6 +69,7 @@ type MockUIProvider struct {
 	MessageCalls     []string
 	ConfirmCalls     []string
 	SelectCalls      []string
+	PasswordCalls    []string
 	DiffAddedCalls   []string
 	DiffChangedCalls []string
 	DiffRemovedCalls []string
@@ -89,6 +92,10 @@ func (m *MockUIProvider) Confirm(message string, defaultValue bool) (bool, error
 func (m *MockUIProvider) Select(message string, options []string) (string, error) {
 	m.SelectCalls = append(m.SelectCalls, message)
 	return m.SelectResult, m.SelectError
+}
+func (m *MockUIProvider) Password(prompt string) (string, error) {
+	m.PasswordCalls = append(m.PasswordCalls, prompt)
+	return m.PasswordResult, m.PasswordError
 }
 func (m *MockUIProvider) Spin(message string, fn func() error) error {
 	if m.SpinError != nil {

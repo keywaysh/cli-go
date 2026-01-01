@@ -41,6 +41,7 @@ type UIProvider interface {
 	IsInteractive() bool
 	Confirm(message string, defaultValue bool) (bool, error)
 	Select(message string, options []string) (string, error)
+	Password(prompt string) (string, error)
 	Spin(message string, fn func() error) error
 	Value(v interface{}) string
 	File(path string) string

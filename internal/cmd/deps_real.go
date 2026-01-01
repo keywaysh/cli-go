@@ -61,6 +61,9 @@ func (r *realUIProvider) Confirm(message string, defaultValue bool) (bool, error
 func (r *realUIProvider) Select(message string, options []string) (string, error) {
 	return ui.Select(message, options)
 }
+func (r *realUIProvider) Password(prompt string) (string, error) {
+	return ui.Password(prompt)
+}
 func (r *realUIProvider) Spin(message string, fn func() error) error { return ui.Spin(message, fn) }
 func (r *realUIProvider) Value(v interface{}) string                 { return ui.Value(v) }
 func (r *realUIProvider) File(path string) string                    { return ui.File(path) }
