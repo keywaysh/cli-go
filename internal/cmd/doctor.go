@@ -8,6 +8,7 @@ import (
 
 	"github.com/keywaysh/cli/internal/analytics"
 	"github.com/keywaysh/cli/internal/config"
+	"github.com/keywaysh/cli/internal/version"
 	"github.com/spf13/cobra"
 )
 
@@ -44,6 +45,7 @@ type doctorSummary struct {
 type DoctorOptions struct {
 	JSONOutput bool
 	Strict     bool
+	Version    string
 }
 
 // runDoctor is the entry point for the doctor command (uses default dependencies)
@@ -51,6 +53,7 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	opts := DoctorOptions{}
 	opts.JSONOutput, _ = cmd.Flags().GetBool("json")
 	opts.Strict, _ = cmd.Flags().GetBool("strict")
+	opts.Version = rootCmd.Version
 
 	return runDoctorWithDeps(opts, defaultDeps)
 }
@@ -63,23 +66,27 @@ func runDoctorWithDeps(opts DoctorOptions, deps *Dependencies) error {
 
 	checks := []checkResult{}
 
-	// 1. Authentication check
+	// 1. Version check
+	versionCheck := checkVersion(opts.Version)
+	checks = append(checks, versionCheck)
+
+	// 2. Authentication check
 	authCheck := checkAuthWithDeps(deps)
 	checks = append(checks, authCheck)
 
-	// 2. GitHub repository check
+	// 3. GitHub repository check
 	githubCheck := checkGitHubWithDeps(deps)
 	checks = append(checks, githubCheck)
 
-	// 3. Network/API check
+	// 4. Network/API check
 	networkCheck := checkNetworkWithDeps(deps)
 	checks = append(checks, networkCheck)
 
-	// 4. Env file check
+	// 5. Env file check
 	envCheck := checkEnvFileWithDeps(deps)
 	checks = append(checks, envCheck)
 
-	// 5. Gitignore check
+	// 6. Gitignore check
 	gitignoreCheck := checkGitignoreWithDeps(deps)
 	checks = append(checks, gitignoreCheck)
 
@@ -297,5 +304,27 @@ func checkGitignoreWithDeps(deps *Dependencies) checkResult {
 		Name:   ".gitignore",
 		Status: "warn",
 		Detail: "Missing .env patterns in .gitignore",
+	}
+}
+
+func checkVersion(currentVersion string) checkResult {
+	ctx, cancel := context.WithTimeout(context.Background(), version.CheckTimeout)
+	defer cancel()
+
+	info := version.CheckForUpdate(ctx, currentVersion)
+	if info != nil && info.Available {
+		return checkResult{
+			ID:     "version",
+			Name:   "CLI version",
+			Status: "warn",
+			Detail: fmt.Sprintf("%s available (current: %s). Run: %s", info.LatestVersion, info.CurrentVersion, info.UpdateCommand),
+		}
+	}
+
+	return checkResult{
+		ID:     "version",
+		Name:   "CLI version",
+		Status: "pass",
+		Detail: fmt.Sprintf("%s (latest)", currentVersion),
 	}
 }
