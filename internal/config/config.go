@@ -6,6 +6,9 @@ const (
 	// DefaultAPIURL is the production API URL
 	DefaultAPIURL = "https://api.keyway.sh"
 
+	// DefaultDashboardURL is the production dashboard URL
+	DefaultDashboardURL = "https://app.keyway.sh"
+
 	// DefaultPostHogHost is the PostHog host
 	DefaultPostHogHost = "https://eu.i.posthog.com"
 )
@@ -21,6 +24,14 @@ func GetAPIURL() string {
 		return url
 	}
 	return DefaultAPIURL
+}
+
+// GetDashboardURL returns the dashboard URL from env or default
+func GetDashboardURL() string {
+	if url := os.Getenv("KEYWAY_DASHBOARD_URL"); url != "" {
+		return url
+	}
+	return DefaultDashboardURL
 }
 
 // GetPostHogHost returns the PostHog host

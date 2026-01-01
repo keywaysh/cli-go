@@ -8,11 +8,10 @@ import (
 
 	"github.com/keywaysh/cli/internal/analytics"
 	"github.com/keywaysh/cli/internal/api"
+	"github.com/keywaysh/cli/internal/config"
 	"github.com/keywaysh/cli/internal/env"
 	"github.com/spf13/cobra"
 )
-
-const dashboardURL = "https://www.keyway.sh/dashboard/vaults"
 
 var initCmd = &cobra.Command{
 	Use:   "init",
@@ -110,7 +109,7 @@ func runInitWithDeps(opts InitOptions, deps *Dependencies) error {
 		}
 
 		deps.UI.Message(deps.UI.Dim(fmt.Sprintf("Run %s to sync your secrets", deps.UI.Command("keyway push"))))
-		deps.UI.Outro(fmt.Sprintf("Dashboard: %s", deps.UI.Link(dashboardURL+"/"+repo)))
+		deps.UI.Outro(fmt.Sprintf("Dashboard: %s", deps.UI.Link(config.GetDashboardURL()+"/vaults/"+repo)))
 		return nil
 	}
 
@@ -167,7 +166,7 @@ func runInitWithDeps(opts InitOptions, deps *Dependencies) error {
 				}
 
 				deps.UI.Message(deps.UI.Dim(fmt.Sprintf("Run %s to sync your secrets", deps.UI.Command("keyway push"))))
-				deps.UI.Outro(fmt.Sprintf("Dashboard: %s", deps.UI.Link(dashboardURL+"/"+repo)))
+				deps.UI.Outro(fmt.Sprintf("Dashboard: %s", deps.UI.Link(config.GetDashboardURL()+"/vaults/"+repo)))
 				return nil
 			}
 
@@ -264,7 +263,7 @@ vaultCreated:
 		deps.UI.Message(deps.UI.Dim(fmt.Sprintf("Run %s to sync your secrets", deps.UI.Command("keyway push"))))
 	}
 
-	deps.UI.Outro(fmt.Sprintf("Dashboard: %s", deps.UI.Link(dashboardURL+"/"+repo)))
+	deps.UI.Outro(fmt.Sprintf("Dashboard: %s", deps.UI.Link(config.GetDashboardURL()+"/vaults/"+repo)))
 	return nil
 }
 

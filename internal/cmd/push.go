@@ -7,6 +7,7 @@ import (
 
 	"github.com/keywaysh/cli/internal/analytics"
 	"github.com/keywaysh/cli/internal/api"
+	"github.com/keywaysh/cli/internal/config"
 	"github.com/keywaysh/cli/internal/env"
 	"github.com/spf13/cobra"
 )
@@ -375,7 +376,7 @@ func runPushWithDeps(opts PushOptions, deps *Dependencies) error {
 		}
 	}
 
-	dashboardURL := fmt.Sprintf("https://www.keyway.sh/dashboard/vaults/%s", repo)
+	dashboardURL := fmt.Sprintf("%s/vaults/%s", config.GetDashboardURL(), repo)
 	deps.UI.Outro(fmt.Sprintf("Dashboard: %s", deps.UI.Link(dashboardURL)))
 
 	return nil

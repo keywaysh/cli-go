@@ -189,7 +189,7 @@ Releases are automated via GoReleaser on tag push.
 ## Links
 
 - [Documentation](https://docs.keyway.sh)
-- [Dashboard](https://www.keyway.sh/dashboard)
+- [Dashboard](https://app.keyway.sh)
 - [Security](https://www.keyway.sh/security)
 - [Status](https://status.keyway.sh)
 

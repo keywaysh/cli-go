@@ -8,8 +8,10 @@ import (
 	"github.com/fatih/color"
 	"github.com/keywaysh/cli/internal/api"
 	"github.com/keywaysh/cli/internal/auth"
+	"github.com/keywaysh/cli/internal/config"
 	"github.com/keywaysh/cli/internal/git"
 	"github.com/keywaysh/cli/internal/ui"
+	"github.com/keywaysh/cli/internal/version"
 	"github.com/pkg/browser"
 	"github.com/spf13/cobra"
 )
@@ -138,7 +140,7 @@ func runActionMenu(cmd *cobra.Command, token string) error {
 	case "Sync with Vercel/Railway/Netlify":
 		return runSync(syncCmd, nil)
 	case "Open dashboard":
-		url := fmt.Sprintf("https://www.keyway.sh/dashboard/vaults/%s", repo)
+		url := fmt.Sprintf("%s/vaults/%s", config.GetDashboardURL(), repo)
 		ui.Success(fmt.Sprintf("Opening %s", ui.Link(url)))
 		_ = browser.OpenURL(url)
 		return nil
@@ -192,9 +194,44 @@ func printCustomHelp(cmd *cobra.Command) {
 }
 
 // Execute runs the root command
-func Execute(version string) error {
-	rootCmd.Version = version
-	return rootCmd.Execute()
+func Execute(ver string) error {
+	rootCmd.Version = ver
+
+	// Start non-blocking version check
+	updateChan := make(chan *version.UpdateInfo, 1)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), version.CheckTimeout)
+		defer cancel()
+		info := version.CheckForUpdate(ctx, ver)
+		updateChan <- info
+	}()
+
+	// Execute the command
+	err := rootCmd.Execute()
+
+	// Display update notice if available (non-blocking receive)
+	select {
+	case info := <-updateChan:
+		if info != nil && info.Available {
+			displayUpdateNotice(info)
+		}
+	default:
+		// Check not complete, don't wait
+	}
+
+	return err
+}
+
+func displayUpdateNotice(info *version.UpdateInfo) {
+	yellow := color.New(color.FgYellow).SprintFunc()
+	fmt.Println()
+	fmt.Printf("  %s Update available: %s → %s\n",
+		yellow("!"),
+		dim(info.CurrentVersion),
+		bold(info.LatestVersion))
+	fmt.Printf("  %s Run: %s\n",
+		dim("→"),
+		cyan(info.UpdateCommand))
 }
 
 func init() {
