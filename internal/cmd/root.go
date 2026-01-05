@@ -188,6 +188,7 @@ func printCustomHelp(cmd *cobra.Command) {
 	fmt.Printf("    %s           %s\n", cyan("keyway pull"), "Download secrets from vault")
 	fmt.Printf("    %s            %s\n", cyan("keyway set"), "Set a single secret in vault")
 	fmt.Printf("    %s            %s\n", cyan("keyway run"), "Run command with injected secrets (Zero-Trust)")
+	fmt.Printf("    %s         %s\n", cyan("keyway docker"), "Run Docker with injected secrets")
 	fmt.Printf("    %s           %s\n", cyan("keyway login"), "Sign in with GitHub")
 	fmt.Println()
 
@@ -285,4 +286,5 @@ func init() {
 	rootCmd.AddCommand(diffCmd)
 	rootCmd.AddCommand(scanCmd)
 	rootCmd.AddCommand(runCmd)
+	rootCmd.AddCommand(dockerCmd)
 }
